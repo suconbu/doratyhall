@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>doraty hall tester</title>
+	<style type="text/css">
+		.table1 td {
+			text-align: center;
+		}
+		.table2 {
+			width: 320px;
+		}
+		.hint {
+			height: 30px;
+		}
+		.hintRow {
+			visibility: hidden;
+		}
+		.overlay {
+			position: absolute;
+	}
+	</style>
+</head>
+
+<body>
+	<div align="center">
+		<h1>どらティ・ホール問題シミュレータ</h1>
+		<button onclick="buttonClicked( 'keep', 100 )">変更なし×100回</button>
+		<button onclick="buttonClicked( 'change', 100 )">変更あり×100回</button>
+		<button onclick="buttonClicked( 'random', 1000 )">ランダム×1000回</button>
+		<table class=table1>
+			<tr>
+				<td><img class="overlay" onclick="doorClicked(0)"><img class="door" onclick="doorClicked(0)"></td>
+				<td><img class="overlay" onclick="doorClicked(1)"><img class="door" onclick="doorClicked(1)"></td>
+				<td><img class="overlay" onclick="doorClicked(2)"><img class="door" onclick="doorClicked(2)"></td>
+			</tr>
+			<tr id="hintRow" class="hintRow">
+				<td><img class="hint"></td>
+				<td><img class="hint"></td>
+				<td><img class="hint"></td>
+			</tr>
+		</table>
+
+		<table class=table2>
+			<tr><td>試行回数</td><td id="tryCount"></td></tr>
+			<tr><td><font color="#00bfff">どら率(変更あり)</font></td><td id="changeDoraRate"></td></tr>
+			<tr><td><font color="#ff4500">どら率(変更なし)</font></td><td id="keepDoraRate"></td></tr>
+		</table>
+
+		<div><img id="chart" src=""></div>
+		<button onclick="hintClicked()">ヒント表示</button>
+		<div><a href="https://ja.wikipedia.org/wiki/%E3%83%A2%E3%83%B3%E3%83%86%E3%82%A3%E3%83%BB%E3%83%9B%E3%83%BC%E3%83%AB%E5%95%8F%E9%A1%8C" style="font-size:8pt;">元ネタ(Wikipedia)</a></div>
+	</div>
+</body>
+
+<script type="text/javascript">
+
+// 最初に選んだドア
+var selectedIndex;
+// 進行状況(0:最初 1:最初の選択済み 2:ドア開けた)
+var selectedPhase;
+// ドアごとの開閉状況
+var doorOpened = [];
+// ドアごとのどら存在有無
+var doraExisted = [];
+// 試行回数(変更なし/変更あり)
+var keepCount = 0;
+var changeCount = 0;
+// アタリ回数(変更なし/変更あり)
+var keepDoraCount = 0;
+var keepDoraRates = [];
+var changeDoraCount = 0;
+var changeDoraRates = [];
+// 自動モード用
+var autoCount = 0;
+var autoIndex = 0;
+var autoMode;
+
+// 初期化
+window.onload = function()
+{
+	resetDoorState();
+	updateResult();
+}
+
+// ドア状態をリセット
+function resetDoorState()
+{
+	var doors = document.getElementsByClassName( "door" );
+	for( i = 0; i < doors.length; i++ )
+	{
+		doorOpened[i] = false;
+		doraExisted[i] = false;
+	}
+
+	selectedPhase = 0;
+	selectedIndex = -1;
+
+	// あたりを設定
+	doraIndex = getRandom( 0, 2 );
+	doraExisted[doraIndex] = true;
+	console.log( "[resetDoorState] doraIndex:" + doraIndex );
+
+	updateDoorImage();
+	updateHintImage();
+}
+
+// ドア画像を状態に合わせて更新
+function updateDoorImage()
+{
+	var doors = document.getElementsByClassName( "door" );
+	for( i = 0; i < doors.length; i++ )
+	{
+		if( doorOpened[i] )
+		{
+			filename = doraExisted[i] ? "door_dora.png" : "door_jai.png";
+		}
+		else
+		{
+			filename = "door_close.png";
+		}
+		doors[i].src = filename;
+	}
+	var doors = document.getElementsByClassName( "overlay" );
+	for( i = 0; i < doors.length; i++ )
+	{
+		if( doorOpened[i] )
+		{
+			doors[i].src = doraExisted[i] ? "marumark.png" : "null.png";
+		}
+		else
+		{
+			doors[i].src = (i == selectedIndex) ? "checkmark.png" : "null.png";
+		}
+	}
+}
+
+// ヒント画像を更新
+function updateHintImage()
+{
+	var hints = document.getElementsByClassName( "hint" );
+	for( i = 0; i < hints.length; i++ )
+	{
+		hints[i].src = doraExisted[i] ? "door_dora.png" : "door_jai.png";
+	}
+}
+
+// 結果表示を更新
+function updateResult()
+{
+	krate = (keepDoraRates.length > 0) ? keepDoraRates[keepDoraRates.length - 1].toFixed( 2 ) : "?";
+	crate = (changeDoraRates.length > 0) ? changeDoraRates[changeDoraRates.length - 1].toFixed( 2 ) : "?";
+
+	document.getElementById( "tryCount" ).innerHTML = keepCount + changeCount;
+	document.getElementById( "keepDoraRate" ).innerHTML = keepDoraCount + " / " + keepCount + " = " + krate + "[%]";
+	document.getElementById( "changeDoraRate" ).innerHTML = changeDoraCount + " / " + changeCount + ' = ' + crate + "[%]";
+
+	if( (autoCount % 25) == 0 )
+	{
+		num = Math.max( keepDoraRates.length, changeDoraRates.length );
+		skip = 1 + Math.floor( num / 100 );
+		kdata = "";
+		cdata = "";
+		for( i = 0; i < num; i++ )
+		{
+			if( (i % skip) == 0 )
+			{
+				kdata += (i < keepDoraRates.length) ? keepDoraRates[i].toFixed() + "," : "-1,";
+				cdata += (i < changeDoraRates.length) ? changeDoraRates[i].toFixed() + "," : "-1,";
+			}
+		}
+		kdata = kdata.slice( 0, -1 );
+		cdata = cdata.slice( 0, -1 );
+		
+		// Google cahrt 設定
+		document.getElementById( "chart" ).src = "http://chart.apis.google.com/chart?chs=500x200&cht=lc&chco=ff4500,00bfff&chg=0,10,1,0&chd=t:" + kdata + "|" + cdata;
+	}
+}
+
+// ドアをクリックされた時
+function doorClicked( index )
+{
+	//index = doorIndexMap[obj.id];
+	console.log( "[doorClicked] index:" + index );
+
+	if( selectedPhase == 0 )
+	{
+		// 開ける候補を選んだ
+
+		selectedIndex = index;
+		//doorOpened[selectedIndex] = true;
+
+		// ジャイ子を開ける
+		// 残りがすべてジャイ子の時、開けるドアに偏りないように
+		var doors = document.getElementsByClassName( "door" );
+		skipCount = doraExisted[index] ? getRandom( 0, 1 ) : 0;
+		for( i = 0; i < doors.length; i++ )
+		{
+			if( i != selectedIndex && !doraExisted[i] )
+			{
+				if( skipCount-- == 0 )
+				{
+					doorOpened[i] = true;
+					break;
+				}
+			}
+		}
+
+		selectedPhase++;
+	}
+	else if( selectedPhase == 1 )
+	{
+		// 開けるドアを決めた
+	
+		if( !doorOpened[index] )
+		{
+			doorOpened[index] = true;
+
+			if( index == selectedIndex )
+			{
+				keepCount++;
+				keepDoraCount += doraExisted[index] ? 1 : 0;
+				keepDoraRates.push( keepDoraCount / keepCount * 100 );
+			}
+			else
+			{
+				changeCount++;
+				changeDoraCount += doraExisted[index] ? 1 : 0;
+				changeDoraRates.push( changeDoraCount / changeCount * 100 );
+			}
+
+			updateResult();
+
+			selectedPhase++;
+		}
+	}
+	else
+	{
+		// 最初から
+		resetDoorState();
+	}
+
+	updateDoorImage();
+
+	// 自動モードの時は自動的に次を押す
+	if( autoCount > 0 )
+	{
+		execAutoClick();
+	}
+}
+
+function execAutoClick()
+{
+	mode = autoMode;
+	if( autoMode == "random" )
+	{
+		var modes = ["keep", "change"];
+		mode = modes[getRandom( 0, 1 )];
+	}
+	
+	if( selectedPhase == 1 && mode == "change" )
+	{
+		// まだ開いてないのを選ぶ
+		var doors = document.getElementsByClassName( "door" );
+		for( i = 0; i < doors.length; i++ )
+		{
+			if( i != selectedIndex && !doorOpened[i] )
+			{
+				autoIndex = i;
+				break;
+			}
+		}
+	}
+	else if( selectedPhase == 2 )
+	{
+		autoIndex = getRandom( 0, 2 );
+		autoCount--;
+	}
+
+	if( autoCount > 0 )
+	{
+		setTimeout( "doorClicked( autoIndex )", 5 );
+	}
+	else
+	{
+		updateResult();
+	}
+}
+
+function getRandom( min, max )
+{
+	return Math.floor( Math.random() * (max - min + 1) ) + min;
+}
+
+function buttonClicked( mode, count )
+{
+	resetDoorState();
+
+	autoMode = mode;
+	autoCount = count;
+
+	autoIndex = getRandom( 0, 2 );
+	doorClicked( autoIndex );
+}
+
+function hintClicked()
+{
+	document.getElementById("hintRow").style.visibility = (document.getElementById("hintRow").style.visibility == "visible") ? "hidden" : "visible";
+}
+
+</script>
+
+</html>
